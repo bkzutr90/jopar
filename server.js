@@ -185,7 +185,11 @@ function connectTikTok() {
     try { const s = await conn.connect(); state.connected = true; pushStatus(); console.log(`Terhubung ke live @${USERNAME} (room ${s.roomId})`); }
     catch (e) { state.connected = false; pushStatus(); console.error('Gagal connect, coba lagi 15 detik:', e.message || e); setTimeout(start, 15000); }
   };
-  conn.on(WebcastEvent.CHAT, (d) => enqueue({ user: who(d), text: d.comment }));
+  conn.on(WebcastEvent.CHAT, (d) => {
+    const text = d.comment || d.content || d.text || '';
+    if (!text) { console.log('[CHAT kosong]', JSON.stringify(d).slice(0, 1000)); return; }
+    enqueue({ user: who(d), text });
+  });
   conn.on(WebcastEvent.GIFT, (d) => {
     if (d.giftType === 1 && d.repeatEnd === false) return;
     const name = d.giftName || d.giftDetails?.giftName || 'gift';
