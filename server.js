@@ -15,7 +15,7 @@ const PORT = Number(process.env.PORT || 3000);
 const USERNAME = (process.env.TIKTOK_USERNAME || '').replace('@', '').trim();
 const AI_NAME = process.env.AI_NAME || 'Bejo';
 const TRIGGERS = (process.env.AI_TRIGGERS || AI_NAME).split(',').map((s) => s.trim()).filter(Boolean);
-const COOLDOWN = Number(process.env.USER_COOLDOWN_MS || 20000);
+const COOLDOWN = Number(process.env.USER_COOLDOWN_MS || 0);
 const MAX_QUEUE = Number(process.env.MAX_QUEUE || 8);
 const VOICE = process.env.TTS_VOICE || 'id-ID-ArdiNeural';
 
@@ -95,13 +95,14 @@ function enqueue({ user, text, priority = 0 }) {
     return;
   }
   broadcast({ type: 'comment', user, text, t: Date.now() });
-  if (shouldIgnore(text) || state.muted) return;
+  if (state.muted) { console.log(`[skip] AI dijeda: ${user}: ${text}`); return; }
+  if (shouldIgnore(text)) { console.log(`[skip] komen tidak valid (terlalu pendek/panjang/spam/link): ${user}: ${text}`); return; }
   const now = Date.now();
-  if (priority === 0 && now - (lastByUser.get(user) || 0) < COOLDOWN) return;
+  if (priority === 0 && now - (lastByUser.get(user) || 0) < COOLDOWN) { console.log(`[skip] cooldown ${Math.ceil((COOLDOWN - (now - lastByUser.get(user))) / 1000)}s: ${user}`); return; }
   if (trigRe.test(text)) priority = Math.max(priority, 1);
   if (state.queue.length >= MAX_QUEUE) {
     const lowest = state.queue.reduce((a, b) => (b.priority < a.priority ? b : a));
-    if (lowest.priority >= priority) return;
+    if (lowest.priority >= priority) { console.log(`[skip] antrean penuh: ${user}`); return; }
     state.queue.splice(state.queue.indexOf(lowest), 1);
   }
   lastByUser.set(user, now);
