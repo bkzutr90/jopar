@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Live</title>
+<style>
+  html,body{margin:0;height:100%;background:#03050d;overflow:hidden;font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#e6f0ff}
+  body{background:radial-gradient(ellipse at 50% 35%,#0b1a3d 0%,#03050d 70%)}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #bubble{position:fixed;left:50%;transform:translateX(-50%);bottom:9%;width:min(92vw,560px);text-align:center;pointer-events:none}
+  #q{display:inline-block;max-width:100%;font-size:clamp(12px,2.4vw,15px);color:#7fb4ff;background:#0a1330cc;border:1px solid #1f3a7a;border-radius:999px;padding:4px 12px;margin-bottom:8px;opacity:0;transition:opacity .3s}
+  #a{font-size:clamp(16px,3.6vw,24px);font-weight:600;line-height:1.35;text-shadow:0 0 12px #3b82f6aa,0 2px 6px #000}
+  #tag{position:fixed;top:14px;left:14px;font-size:13px;color:#7fb4ff;display:flex;gap:8px;align-items:center;letter-spacing:.08em}
+  #dot{width:9px;height:9px;border-radius:50%;background:#555}
+  #dot.on{background:#22c55e;box-shadow:0 0 8px #22c55e}
+  #gift{position:fixed;top:48px;left:14px;font-size:15px;color:#ffd27a;opacity:0;transition:opacity .3s;text-shadow:0 0 10px #000}
+  #start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000a;z-index:9;cursor:pointer;font-size:20px;text-align:center;padding:20px}
+  #start span{border:1px solid #3b82f6;padding:14px 22px;border-radius:12px;background:#0a1330}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="tag"><div id="dot"></div><span id="name">AI LIVE</span></div>
+<div id="gift"></div>
+<div id="bubble"><div id="q"></div><div id="a"></div></div>
+<div id="start"><span>Klik sekali untuk mengaktifkan suara</span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ================= 3D kepala wireframe =================
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, .1, 50);
+camera.position.set(0,0.05,4.6);
+
+const head = new THREE.Group(); scene.add(head);
+const g = new THREE.SphereGeometry(1, 44, 34);
+const p = g.attributes.position;
+for (let i=0;i<p.count;i++){
+  let x=p.getX(i), y=p.getY(i), z=p.getZ(i);
+  if (y<0){ const t=Math.min(1,-y); const k=1-.38*t*t; x*=k; z*=k; }
+  if (z>0) z*=.82;
+  p.setXYZ(i, x*.8, y*1.12, z*.9);
+}
+g.computeVertexNormals();
+const wireMat = new THREE.MeshBasicMaterial({color:0x2f6bff, wireframe:true, transparent:true, opacity:.5});
+head.add(new THREE.Mesh(g, wireMat));
+head.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({color:0x050b1f, transparent:true, opacity:.75, side:THREE.BackSide})));
+
+for (const s of [-1,1]){
+  const e = new THREE.Mesh(new THREE.SphereGeometry(.16,10,8), new THREE.MeshBasicMaterial({color:0x2f6bff,wireframe:true,transparent:true,opacity:.5}));
+  e.scale.set(.5,1.2,.8); e.position.set(s*.8,0,-.05); head.add(e);
+}
+const nose = new THREE.Mesh(new THREE.ConeGeometry(.1,.38,5), new THREE.MeshBasicMaterial({color:0x6aa2ff,wireframe:true,transparent:true,opacity:.8}));
+nose.position.set(0,-.05,.76); nose.rotation.x=-.25; head.add(nose);
+
+// mata
+const eyeMat = new THREE.MeshBasicMaterial({color:0xff8a1f});
+const glowMat = new THREE.MeshBasicMaterial({color:0xff8a1f, transparent:true, opacity:.28, blending:THREE.AdditiveBlending, depthWrite:false});
+const eyes=[], brows=[];
+for (const s of [-1,1]){
+  const e = new THREE.Mesh(new THREE.SphereGeometry(.055,16,12), eyeMat);
+  const gl = new THREE.Mesh(new THREE.SphereGeometry(.15,16,12), glowMat);
+  e.position.set(s*.28,.22,.68); gl.position.copy(e.position);
+  const socket = new THREE.Mesh(new THREE.TorusGeometry(.12,.012,6,24), new THREE.MeshBasicMaterial({color:0x6aa2ff}));
+  socket.position.set(s*.28,.22,.67);
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(.24,.02,.02), new THREE.MeshBasicMaterial({color:0x9fc4ff}));
+  brow.position.set(s*.28,.40,.66);
+  head.add(socket,e,gl,brow); eyes.push(e); brows.push({m:brow,s});
+}
+// mulut: kotak (buka-tutup) + busur (senyum / cemberut)
+const mouth = new THREE.Mesh(new THREE.BoxGeometry(.36,1,.02), new THREE.MeshBasicMaterial({color:0x02040c}));
+mouth.position.set(0,-.43,.66);
+mouth.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(.36,1,.02)), new THREE.LineBasicMaterial({color:0x9fc4ff})));
+head.add(mouth);
+const arcMat = new THREE.MeshBasicMaterial({color:0x9fc4ff, transparent:true});
+const arc = new THREE.Mesh(new THREE.TorusGeometry(.18,.012,6,20,Math.PI), arcMat);
+arc.position.set(0,-.43,.67); head.add(arc);
+
+// latar partikel + ledakan gift
+const N=160, arr=new Float32Array(N*3);
+for(let i=0;i<N*3;i++) arr[i]=(Math.random()-.5)*7;
+const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(arr,3));
+const pts = new THREE.Points(pg, new THREE.PointsMaterial({color:0x4f8bff,size:.02,transparent:true,opacity:.6})); scene.add(pts);
+
+const B=90, bpos=new Float32Array(B*3), bvel=new Float32Array(B*3);
+const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(bpos,3));
+const bmat = new THREE.PointsMaterial({color:0xffd23f,size:.07,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false});
+scene.add(new THREE.Points(bg,bmat));
+let burstLife=0;
+function burst(color){
+  bmat.color.set(color); burstLife=1;
+  for(let i=0;i<B;i++){
+    bpos.set([0,-.1,.9],i*3);
+    const a=Math.random()*Math.PI*2, s=.6+Math.random()*1.6;
+    bvel.set([Math.cos(a)*s, Math.sin(a)*s+.6, (Math.random()-.2)*1.2], i*3);
+  }
+}
+
+function resize(){
+  const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.position.z = w/h<.8 ? 5.2 : 4.2; camera.updateProjectionMatrix();
+}
+addEventListener('resize',resize); resize();
+
+// ================= Ekspresi =================
+// brow: kemiringan alis (+ sedih, - marah) | browY: tinggi alis | smile: + senyum, - cemberut
+// eyeS: besar mata | open: mulut dibuka paksa | bounce: loncat kepala
+const EXPR = {
+  netral:{eye:0xff8a1f, brow:0,   browY:0,   smile:.05, eyeS:1,   open:0,   bounce:0},
+  senang:{eye:0xffd23f, brow:.12, browY:.03, smile:.9,  eyeS:1.1, open:0,   bounce:.5},
+  cinta: {eye:0xff5fa2, brow:.18, browY:.04, smile:.9,  eyeS:1.2, open:0,   bounce:.7, burst:0xff5fa2},
+  kaget: {eye:0xffffff, brow:0,   browY:.12, smile:-.2, eyeS:1.7, open:.3,  bounce:.2},
+  marah: {eye:0xff2a2a, brow:-.45,browY:-.02,smile:-.8, eyeS:.9,  open:0,   bounce:0},
+  sedih: {eye:0x6aa2ff, brow:.4,  browY:0,   smile:-.8, eyeS:.8,  open:0,   bounce:0},
+  jahil: {eye:0xc084fc, brow:-.22,browY:.03, smile:.8,  eyeS:1,   open:0,   bounce:.2},
+  wow:   {eye:0xffffff, brow:0,   browY:.14, smile:.4,  eyeS:1.8, open:.35, bounce:1,  burst:0xffd23f, spin:true},
+  rainbow:{eye:0xff8a1f,brow:.1,  browY:.05, smile:.8,  eyeS:1.4, open:0,   bounce:.6, burst:0x7dd3fc, rainbow:true},
+};
+let cur = EXPR.netral, exprUntil=0, thinking=false, spinKick=0;
+const live = {brow:0, browY:0, smile:.05, eyeS:1, open:0, bounce:0};
+function setExpr(name, ms=4000){
+  const e = EXPR[name] || EXPR.netral;
+  cur = e; exprUntil = performance.now()+ms;
+  if (e.burst) burst(e.burst);
+  if (e.spin) spinKick = 6;
+}
+
+// ================= Animasi =================
+let speaking=false, levelFromAudio=null, mouthOpen=.05;
+const eyeColor=new THREE.Color(0xff8a1f), tmp=new THREE.Color();
+const t0=performance.now();
+function frame(){
+  const now=performance.now(), t=(now-t0)/1000;
+  if (now>exprUntil && cur!==EXPR.netral) cur=EXPR.netral;
+
+  // gerak kepala
+  spinKick *= .95;
+  head.rotation.y = Math.sin(t*.45)*.38 + spinKick;
+  head.rotation.x = Math.sin(t*.3)*.06;
+  const bounce = cur.bounce ? Math.abs(Math.sin(t*7))*.07*cur.bounce : 0;
+  head.position.y = Math.sin(t*.9)*.03 + bounce;
+  pts.rotation.y = t*.03;
+
+  // halus menuju nilai ekspresi
+  for (const k of ['brow','browY','smile','eyeS','open','bounce']) live[k] += (cur[k]-live[k])*.15;
+
+  // mulut
+  let target = .03;
+  if (speaking){
+    target = levelFromAudio!==null ? Math.min(.5, .04+levelFromAudio*3.4)
+                                   : .06 + Math.abs(Math.sin(t*13)*Math.sin(t*5.3))*.3;
+  }
+  target = Math.max(target, live.open);
+  mouthOpen += (target-mouthOpen)*.4;
+  mouth.scale.y = Math.max(.02, mouthOpen);
+  mouth.scale.x = 1 + Math.max(0,live.smile)*.25;
+  // busur senyum/cemberut hanya terlihat saat mulut hampir tertutup
+  const arcShow = Math.max(0, 1 - mouthOpen*6) * Math.min(1, Math.abs(live.smile)*1.3);
+  arcMat.opacity = arcShow;
+  arc.rotation.z = live.smile>=0 ? Math.PI : 0;     // senyum: busur ke bawah
+  arc.position.y = live.smile>=0 ? -.36 : -.5;
+  arc.scale.setScalar(.8 + Math.abs(live.smile)*.3);
+
+  // alis
+  for (const b of brows){
+    b.m.rotation.z = b.s<0 ? live.brow : -live.brow;
+    b.m.position.y = .40 + live.browY;
+  }
+
+  // warna mata: hijau saat membaca, pelangi saat efek rainbow
+  let want = thinking ? 0x22e06b : cur.eye;
+  if (cur.rainbow && !thinking){ tmp.setHSL((t*.8)%1, 1, .55); } else tmp.set(want);
+  eyeColor.lerp(tmp, .18);
+  eyeMat.color.copy(eyeColor); glowMat.color.copy(eyeColor);
+  const blink = (Math.sin(t*1.3)>.985) ? .15 : 1;
+  eyes.forEach(e=>e.scale.set(live.eyeS, live.eyeS*blink, live.eyeS));
+  wireMat.color.setHex(0x2f6bff).lerp(eyeColor, cur===EXPR.netral?0:.25);
+
+  // ledakan partikel
+  if (burstLife>0){
+    burstLife -= .014; bmat.opacity = Math.max(0,burstLife);
+    for(let i=0;i<B;i++){ bvel[i*3+1]-=.02; bpos[i*3]+=bvel[i*3]*.02; bpos[i*3+1]+=bvel[i*3+1]*.02; bpos[i*3+2]+=bvel[i*3+2]*.02; }
+    bg.attributes.position.needsUpdate=true;
+  }
+
+  // lip-sync dari amplitudo suara
+  if (analyser && levelFromAudio!==null){
+    analyser.getByteTimeDomainData(dataArr);
+    let sum=0; for(let i=0;i<dataArr.length;i++){ const v=(dataArr[i]-128)/128; sum+=v*v; }
+    levelFromAudio = Math.sqrt(sum/dataArr.length);
+  }
+  renderer.render(scene,camera);
+  requestAnimationFrame(frame);
+}
+
+// ================= Suara =================
+let actx=null, analyser=null, dataArr=null, soundOn=false, voice=null;
+function pickVoice(){ const v=speechSynthesis.getVoices(); voice=v.find(x=>/^id/i.test(x.lang))||null; }
+if ('speechSynthesis' in window){ speechSynthesis.onvoiceschanged=pickVoice; pickVoice(); }
+
+async function speak(text, onEnd){
+  speaking=true;
+  let ended=false; const finish=()=>{ if(ended) return; ended=true; speaking=false; levelFromAudio=null; onEnd&&onEnd(); };
+  const guard=setTimeout(finish, 6000+text.length*140);
+  if (!soundOn){ setTimeout(()=>{clearTimeout(guard);finish();}, 1500+text.length*70); return; }
+  try{
+    const r = await fetch('/api/tts?text='+encodeURIComponent(text));
+    if(!r.ok) throw new Error('tts');
+    const buf = await actx.decodeAudioData(await r.arrayBuffer());
+    const src = actx.createBufferSource(); src.buffer=buf;
+    src.connect(analyser); analyser.connect(actx.destination);
+    src.onended=()=>{clearTimeout(guard);finish();};
+    levelFromAudio=0; src.start();
+  }catch(e){
+    // cadangan: suara bawaan browser
+    if(!('speechSynthesis' in window)){ setTimeout(finish,1500+text.length*70); return; }
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text); u.lang='id-ID'; if(voice) u.voice=voice; u.rate=1.05;
+    u.onend=()=>{clearTimeout(guard);finish();}; u.onerror=()=>{clearTimeout(guard);finish();};
+    speechSynthesis.speak(u);
+  }
+}
+document.getElementById('start').onclick = e => {
+  actx = new (window.AudioContext||window.webkitAudioContext)();
+  analyser = actx.createAnalyser(); analyser.fftSize=512; dataArr=new Uint8Array(analyser.fftSize);
+  actx.resume(); soundOn=true; e.currentTarget.remove();
+};
+
+// ================= WebSocket =================
+const $ = id => document.getElementById(id);
+let ws, hideTimer;
+function connect(){
+  ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
+  ws.onclose = ()=>{ $('dot').classList.remove('on'); setTimeout(connect,2000); };
+  ws.onmessage = ev=>{
+    const m = JSON.parse(ev.data);
+    if (m.type==='status'){
+      $('dot').classList.toggle('on', m.connected || !m.username);
+      if (m.name){ $('name').textContent = m.name.toUpperCase(); document.title = m.name+' AI Live'; }
+    }
+    if (m.type==='thinking'){
+      thinking=true;
+      $('q').textContent = `${m.user}: ${m.text}`; $('q').style.opacity=1; $('a').textContent='';
+      clearTimeout(hideTimer);
+    }
+    if (m.type==='speak'){
+      thinking=false;
+      setExpr(m.emotion||'netral', 3000+m.answer.length*90);
+      $('q').textContent = `${m.user}: ${m.question}`; $('q').style.opacity=1;
+      $('a').textContent = m.answer;
+      speak(m.answer, ()=>{
+        ws.send(JSON.stringify({type:'done'}));
+        hideTimer=setTimeout(()=>{ $('a').textContent=''; $('q').style.opacity=0; },4000);
+      });
+    }
+    if (m.type==='gift'){
+      setExpr(m.effect, m.ms||4000);
+      $('gift').textContent = `🎁 ${m.user} kirim ${m.gift}${m.count>1?' x'+m.count:''}`;
+      $('gift').style.opacity=1; setTimeout(()=>$('gift').style.opacity=0,3500);
+    }
+  };
+}
+connect(); frame();
+</script>
+</body>
+</html>

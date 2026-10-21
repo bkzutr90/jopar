@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard AI Live</title>
+<style>
+  body{margin:0;background:#0b1020;color:#e6f0ff;font-family:system-ui,sans-serif;padding:16px;max-width:760px;margin:auto}
+  h1{font-size:20px} .row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .card{background:#111a33;border:1px solid #1f2f5f;border-radius:10px;padding:10px 14px}
+  input{flex:1;min-width:120px;background:#0b1020;border:1px solid #2a3c7a;color:#fff;border-radius:8px;padding:9px}
+  button{background:#2f6bff;color:#fff;border:0;border-radius:8px;padding:9px 14px;cursor:pointer}
+  button.red{background:#c2410c} #log{height:55vh;overflow:auto;font-size:14px}
+  #log div{padding:4px 0;border-bottom:1px solid #1a2548} b{color:#7fb4ff} i{color:#9ae6b4;font-style:normal}
+</style></head><body>
+<h1 id="h">Dashboard AI Live</h1>
+<div class="row">
+  <div class="card">Status: <b id="st">-</b></div>
+  <div class="card">Antrean: <b id="qn">0</b></div>
+  <div class="card">Dijawab: <b id="hd">0</b></div>
+  <div class="card">Penonton: <b id="vw">0</b></div>
+  <div class="card">Diblokir: <b id="bl">0</b></div>
+</div>
+<div class="row">
+  <button id="mute">Jeda AI</button>
+  <button class="red" id="clear">Kosongkan antrean</button>
+  <a href="/" target="_blank" style="color:#7fb4ff;align-self:center">Buka tampilan avatar</a>
+</div>
+<div class="row"><input id="u" placeholder="nama" value="tester" style="max-width:120px"><input id="t" placeholder="ketik komen uji coba…"><button id="send">Kirim</button></div>
+<div class="row">
+  <select id="g" style="background:#0b1020;color:#fff;border:1px solid #2a3c7a;border-radius:8px;padding:9px">
+    <option value="Mawar|1">Mawar (cinta)</option><option value="Kopi|1">Kopi (senang)</option>
+    <option value="Mata Dibayar Mata|1">Mata (pelangi)</option><option value="Gift Kecil|5">Gift kecil</option>
+    <option value="Gift Sedang|30">Gift sedang (kaget)</option><option value="Lion|500">Gift besar (wow)</option>
+  </select><button id="sg">Uji gift</button>
+  <select id="e" style="background:#0b1020;color:#fff;border:1px solid #2a3c7a;border-radius:8px;padding:9px">
+    <option>senang</option><option>cinta</option><option>kaget</option><option>marah</option><option>sedih</option><option>jahil</option><option>wow</option><option>rainbow</option>
+  </select><button id="se">Uji ekspresi</button>
+</div>
+<div class="card" id="log"></div>
+<script>
+const $=id=>document.getElementById(id); let muted=false;
+const post=(u,b)=>fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b||{})});
+$('send').onclick=()=>{ if($('t').value.trim()){ post('/api/test',{user:$('u').value,text:$('t').value}); $('t').value=''; } };
+$('t').onkeydown=e=>{ if(e.key==='Enter') $('send').click(); };
+$('mute').onclick=async()=>{ muted=!muted; await post('/api/mute',{muted}); $('mute').textContent=muted?'Lanjutkan AI':'Jeda AI'; };
+$('clear').onclick=()=>post('/api/clear');
+$('sg').onclick=()=>{ const [gift,diamonds]=$('g').value.split('|'); post('/api/test-gift',{user:$('u').value,gift,diamonds:Number(diamonds)}); };
+$('se').onclick=()=>post('/api/test',{user:$('u').value,text:'tolong tunjukkan ekspresi '+$('e').value});
+function add(html){ const d=document.createElement('div'); d.innerHTML=html; const l=$('log'); l.prepend(d); while(l.children.length>150) l.lastChild.remove(); }
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function connect(){
+  const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
+  ws.onclose=()=>setTimeout(connect,2000);
+  ws.onmessage=ev=>{ const m=JSON.parse(ev.data);
+    if(m.type==='status'){ if(m.name){ $('h').textContent='Dashboard '+m.name; document.title='Dashboard '+m.name; }  $('st').textContent=m.username?(m.connected?'Terhubung @'+m.username:'Menghubungkan…'):'Mode demo'; $('qn').textContent=m.queue; $('hd').textContent=m.handled; $('vw').textContent=m.viewers; $('bl').textContent=m.blocked||0; }
+    if(m.type==='comment') add(`<b>${esc(m.user)}</b>: ${esc(m.text)}`);
+    if(m.type==='speak') add(`<i>🤖 → ${esc(m.user)}: ${esc(m.answer)}</i>`);
+    if(m.type==='blocked') add(`<span style="color:#fbbf24">🚫 komen dari ${esc(m.user)} diblokir (toxic)</span>`);
+    if(m.type==='gift') add(`🎁 ${esc(m.user)} kirim ${esc(m.gift)}`);
+    if(m.type==='error') add(`<span style="color:#f87171">⚠ ${esc(m.message)}</span>`);
+  };
+}
+connect();
+</script></body></html>
