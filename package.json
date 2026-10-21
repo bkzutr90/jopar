@@ -3,8 +3,12 @@
   "version": "2.0.0",
   "description": "Baca komen TikTok Live lalu dijawab AI gratis (avatar kepala 3D + suara natural)",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

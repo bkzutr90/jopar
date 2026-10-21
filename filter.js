@@ -11,7 +11,7 @@ const STRICT = [
 
 // Hanya cocok jika berdiri sebagai kata utuh (supaya "asumsi" atau "tainted" tidak ikut kena).
 const WORDS = [
-  'asu', 'babi', 'tai', 'taik', 'idiot', 'mampus', 'monyet', 'kunyuk', 'anjg', 'bgst', 'bngst',
+  'asu', 'babi', 'tai', 'taik', 'idiot', 'mampus', 'monyet', 'kunyuk', 'anjg', 'anjir', 'bgst', 'bngst',
   'ajg', 'kntl', 'mmk', 'ngtd', 'perek', 'coli', 'bacot', 'sinting', 'gila', 'autis', 'bego',
 ];
 // "anjir", "gila", "bego", "bacot" itu ringan; hapus dari WORDS kalau mau tetap diizinkan.
