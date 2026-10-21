@@ -202,11 +202,12 @@ let actx=null, analyser=null, dataArr=null, soundOn=false, voice=null;
 function pickVoice(){ const v=speechSynthesis.getVoices(); voice=v.find(x=>/^id/i.test(x.lang))||null; }
 if ('speechSynthesis' in window){ speechSynthesis.onvoiceschanged=pickVoice; pickVoice(); }
 
-async function speak(text, onEnd){
-  speaking=true;
-  let ended=false; const finish=()=>{ if(ended) return; ended=true; speaking=false; levelFromAudio=null; onEnd&&onEnd(); };
-  const guard=setTimeout(finish, 6000+text.length*140);
-  if (!soundOn){ setTimeout(()=>{clearTimeout(guard);finish();}, 1500+text.length*70); return; }
+async function speak(text, onEnd, onStart){
+  let ended=false, started=false;
+  const begin=()=>{ if(started) return; started=true; speaking=true; onStart&&onStart(); };
+  const finish=()=>{ if(ended) return; ended=true; speaking=false; levelFromAudio=null; onEnd&&onEnd(); };
+  const guard=setTimeout(finish, 15000+text.length*140);
+  if (!soundOn){ begin(); setTimeout(()=>{clearTimeout(guard);finish();}, 1500+text.length*70); return; }
   try{
     const r = await fetch('/api/tts?text='+encodeURIComponent(text));
     if(!r.ok) throw new Error('tts');
@@ -214,12 +215,12 @@ async function speak(text, onEnd){
     const src = actx.createBufferSource(); src.buffer=buf;
     src.connect(analyser); analyser.connect(actx.destination);
     src.onended=()=>{clearTimeout(guard);finish();};
-    levelFromAudio=0; src.start();
+    levelFromAudio=0; begin(); src.start();
   }catch(e){
-    // cadangan: suara bawaan browser
-    if(!('speechSynthesis' in window)){ setTimeout(finish,1500+text.length*70); return; }
+    if(!('speechSynthesis' in window)){ begin(); setTimeout(finish,1500+text.length*70); return; }
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text); u.lang='id-ID'; if(voice) u.voice=voice; u.rate=1.05;
+    u.onstart=begin;
     u.onend=()=>{clearTimeout(guard);finish();}; u.onerror=()=>{clearTimeout(guard);finish();};
     speechSynthesis.speak(u);
   }
@@ -251,11 +252,11 @@ function connect(){
       thinking=false;
       setExpr(m.emotion||'netral', 3000+m.answer.length*90);
       $('q').textContent = `${m.user}: ${m.question}`; $('q').style.opacity=1;
-      $('a').textContent = m.answer;
+      $('a').textContent = '';
       speak(m.answer, ()=>{
         ws.send(JSON.stringify({type:'done'}));
         hideTimer=setTimeout(()=>{ $('a').textContent=''; $('q').style.opacity=0; },4000);
-      });
+      }, ()=>{ $('a').textContent = m.answer; });
     }
     if (m.type==='gift'){
       setExpr(m.effect, m.ms||4000);
